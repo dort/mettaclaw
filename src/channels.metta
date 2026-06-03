@@ -16,7 +16,7 @@
               (progn (configure IRC_channel ##metta)
                      (configure IRC_server "irc.quakenet.org")
                      (configure IRC_port 6667)
-                     (configure IRC_user maxbotnick)
+                     (configure IRC_user derppeoples)
                      (py-call (irc.start_irc (IRC_channel) (IRC_server) (IRC_port) (IRC_user))))
               (progn (configure MM_URL "https://chat.singularitynet.io")
                      (configure MM_CHANNEL_ID "8fjrmabjx7gupy7e5kjznpt5qh")
@@ -35,9 +35,9 @@
    (progn (change-state! &lastsend $msg)
           (let $safemsg (string-replace $msg  "\n" "\\n")
                (if (== (commchannel) irc)
-                   (let $temp (cut) (py-call (irc.send_message $safemsg)))
-                   (let $temp (cut) (py-call (mattermost.send_message $safemsg)))))
-          SEND-SUCCESS))
+                   (progn (py-call (irc.send_message $safemsg))
+                          IRC-SEND-QUEUED)
+                   (py-call (mattermost.send_message $safemsg))))))
 
 ;Search the internet for some information:
 (= (search $msg)

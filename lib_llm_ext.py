@@ -1,19 +1,45 @@
-import os, openai
+import multiprocessing
+import os
+import sys
 
-OPENROUTER_CLIENT = openai.OpenAI(
-    api_key=os.environ["OPENROUTER_API_KEY"],
-    base_url="https://openrouter.ai/api/v1"
-)
+import openai
 
-ASI_CLIENT = openai.OpenAI(
-    api_key=os.environ["ASI_API_KEY"],
-    base_url="https://inference.asicloud.cudos.org/v1"
-)
+_OPENROUTER_CLIENT = None
+_ASI_CLIENT = None
+_ANTHROPIC_CLIENT = None
 
-ANTHROPIC_CLIENT = openai.OpenAI(
-    api_key=os.environ["ANTHROPIC_API_KEY"],
-    base_url="https://api.anthropic.com/v1/"
-)
+def _client_from_env(env_var, base_url):
+    api_key = os.environ.get(env_var)
+    if not api_key:
+        raise RuntimeError(f"{env_var} must be set to use this provider.")
+    return openai.OpenAI(api_key=api_key, base_url=base_url)
+
+def _openrouter_client():
+    global _OPENROUTER_CLIENT
+    if _OPENROUTER_CLIENT is None:
+        _OPENROUTER_CLIENT = _client_from_env(
+            "OPENROUTER_API_KEY",
+            "https://openrouter.ai/api/v1",
+        )
+    return _OPENROUTER_CLIENT
+
+def _asi_client():
+    global _ASI_CLIENT
+    if _ASI_CLIENT is None:
+        _ASI_CLIENT = _client_from_env(
+            "ASI_API_KEY",
+            "https://inference.asicloud.cudos.org/v1",
+        )
+    return _ASI_CLIENT
+
+def _anthropic_client():
+    global _ANTHROPIC_CLIENT
+    if _ANTHROPIC_CLIENT is None:
+        _ANTHROPIC_CLIENT = _client_from_env(
+            "ANTHROPIC_API_KEY",
+            "https://api.anthropic.com/v1/",
+        )
+    return _ANTHROPIC_CLIENT
 
 def _clean(text):
     return text.replace("_quote_", '"').replace("_apostrophe_", "'")
@@ -41,21 +67,21 @@ def _chat(client, model, content, max_tokens=6000, max_retries=5, retry_delay=1)
 
 def useOpenRouter(content):
     return _chat(
-        client=OPENROUTER_CLIENT,
+        client=_openrouter_client(),
         model="z-ai/glm-5.1",  # replace with your OpenRouter model id
         content=content
     )
 
 def useMiniMax(content):
     return _chat(
-        client=ASI_CLIENT,
+        client=_asi_client(),
         model="minimax/minimax-m2.7", #"minimax/minimax-m2.7", #"asi1-mini",
         content=content
     )
 
 def useClaude(content):
     return _chat(
-        client=ANTHROPIC_CLIENT,
+        client=_anthropic_client(),
         model="claude-opus-4-6",
         content=content
     )
@@ -66,6 +92,13 @@ def initLocalEmbedding():
     model_name="intfloat/e5-large-v2"
     global _embedding_model
     if _embedding_model is None:
+        python_executable = os.environ.get("METTACLAW_PYTHON")
+        if python_executable and os.path.exists(python_executable):
+            multiprocessing.set_executable(python_executable)
+        elif sys.executable and os.path.basename(sys.executable).startswith("swipl"):
+            raise RuntimeError(
+                "Local embeddings need METTACLAW_PYTHON set to a real Python executable."
+            )
         from sentence_transformers import SentenceTransformer
         _embedding_model = SentenceTransformer(model_name)
     return _embedding_model
@@ -541,7 +574,7 @@ def useClaudeYoutubeImage(
     else:
         image_data_url = youtube_frame_to_data_url(youtube_url, seconds=seconds)
 
-    resp = ANTHROPIC_CLIENT.chat.completions.create(
+    resp = _anthropic_client().chat.completions.create(
         model="claude-opus-4-6",
         messages=[
             {

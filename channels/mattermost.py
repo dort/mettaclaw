@@ -16,12 +16,16 @@ BOT_TOKEN = ""
 _seen_post_ids = set()
 _seen_post_ids_lock = threading.Lock()
 
+def _log(msg):
+    print(f"[Mattermost] {msg}", flush=True)
+
 def _get_bot_user_id():
-    global headers
     r = requests.get(
         f"{MM_URL}/api/v4/users/me",
-        headers=_headers
+        headers=_headers,
+        timeout=10,
     )
+    r.raise_for_status()
     return r.json()["id"]
 
 def _set_last(msg):
@@ -42,8 +46,10 @@ def getLastMessage():
 def _get_display_name(user_id):
     r = requests.get(
         f"{MM_URL}/api/v4/users/{user_id}",
-        headers=_headers
+        headers=_headers,
+        timeout=10,
     )
+    r.raise_for_status()
     u = r.json()
 
     # Mimic common Mattermost display setting
@@ -56,12 +62,25 @@ def _ws_loop():
     global _ws, _connected, BOT_USER_ID
 
     ws_url = MM_URL.replace("https", "wss") + "/api/v4/websocket"
-    ws = websocket.WebSocket()
-    ws.connect(ws_url, header=[f"Authorization: Bearer {BOT_TOKEN}"])
+    ws = None
+    try:
+        _log(f"connecting to {ws_url} channel={CHANNEL_ID}")
+        ws = websocket.WebSocket()
+        ws.connect(ws_url, header=[f"Authorization: Bearer {BOT_TOKEN}"])
 
-    BOT_USER_ID = _get_bot_user_id()
-    _ws = ws
-    _connected = True
+        BOT_USER_ID = _get_bot_user_id()
+        _ws = ws
+        _connected = True
+        _log(f"connected as bot_user_id={BOT_USER_ID}")
+    except Exception as e:
+        _log(f"connection failed: {type(e).__name__}: {e}")
+        _connected = False
+        if ws is not None:
+            try:
+                ws.close()
+            except Exception:
+                pass
+        return
 
     last_ping = time.time()
 
@@ -89,15 +108,19 @@ def _ws_loop():
                         continue
                     _seen_post_ids.add(post_id)
                 name = _get_display_name(post["user_id"])
+                _log(f"received from {name}: {post['message']}")
                 _set_last(f"{name}: {post['message']}")
 
         except websocket.WebSocketTimeoutException:
             continue
-        except Exception:
+        except Exception as e:
+            _log(f"websocket loop failed: {type(e).__name__}: {e}")
             break
 
-    ws.close()
+    if ws is not None:
+        ws.close()
     _connected = False
+    _log("disconnected")
 
 def start_mattermost(MM_URL_, CHANNEL_ID_, BOT_TOKEN_):
     global _running, MM_URL, CHANNEL_ID, BOT_TOKEN, _headers
@@ -106,6 +129,7 @@ def start_mattermost(MM_URL_, CHANNEL_ID_, BOT_TOKEN_):
     BOT_TOKEN = BOT_TOKEN_
     _headers = {"Authorization": f"Bearer {BOT_TOKEN}"}
     _running = True
+    _log(f"starting channel listener url={MM_URL} channel={CHANNEL_ID} token_set={bool(BOT_TOKEN)}")
     t = threading.Thread(target=_ws_loop, daemon=True)
     t.start()
     return t
@@ -117,9 +141,16 @@ def stop_mattermost():
 def send_message(text):
     text = text.replace("\\n", "\n")
     if not _connected:
-        return
-    requests.post(
+        _log("send failed: not connected")
+        return "MATTERMOST-SEND-FAILED-NOT-CONNECTED"
+    r = requests.post(
         f"{MM_URL}/api/v4/posts",
         headers=_headers,
-        json={"channel_id": CHANNEL_ID, "message": text}
+        json={"channel_id": CHANNEL_ID, "message": text},
+        timeout=10,
     )
+    if not r.ok:
+        _log(f"send failed: HTTP {r.status_code}: {r.text[:300]}")
+        return f"MATTERMOST-SEND-FAILED-HTTP-{r.status_code}"
+    _log("send success")
+    return "MATTERMOST-SEND-SUCCESS"

@@ -11,6 +11,7 @@
 (= (visionRate) (empty))
 (= (visionChannel) (empty))
 (= (visionChannelActive) (empty))
+(= (agentName) (empty))
 
 (= (initLoop)
    (progn (configure maxNewInputLoops 50) ;20
@@ -18,7 +19,7 @@
           (configure spamShield True)
           (configure sleepInterval 1) ;10
           (configure LLM gpt-5.4)
-          (configure provider Anthropic) ;Anthropic or OpenAI or ASICloud or OpenRouter
+          (configure provider ASICloud) ;Anthropic or OpenAI or ASICloud or OpenRouter
           (configure maxOutputToken 6000)
           (configure reasoningMode medium)
           (configure wakeupInterval 600) ;600=10 minutes
@@ -26,12 +27,17 @@
           (configure visionRate 5)
           (configure visionChannel https://www.youtube.com/watch?v=CMn6xQXuSjI)
           (configure visionChannelActive False)
+          (configure agentName "Derp Peoples")
           (change-state! &prevmsg "")
           (change-state! &lastresults "")
+          (change-state! &nextWakeAt (+ (get_time) (wakeupInterval)))
           (change-state! &loops (maxNewInputLoops))))
 
 (= (getContext)
-   (string-safe (py-str ("PROMPT: " (getPrompt) " SKILLS: " (getSkills)
+   (string-safe (py-str ("PROMPT: " (getPrompt)
+                         " IDENTITY: Your name is " (agentName) ". Refer to yourself only as " (agentName) ". Do not call yourself MeTTaClaw or Max Botnick."
+                         " RUNTIME: You are operating inside the PeTTa/MeTTaClaw runtime. The listed tool commands are valid for you here. Never claim to be Claude Code."
+                         " SKILLS: " (getSkills)
                          " OUTPUT_FORMAT: Up to 5 lines, do not wrap quotes around args, do not use variables:" (newline)
                          " toolName1 arg1" (newline)
                          " toolName2 arg2" (newline)
