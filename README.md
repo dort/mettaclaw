@@ -33,7 +33,7 @@ First, get [SWI-Prolog](https://www.swi-prolog.org/). Then:
 ```
 git clone https://github.com/trueagi-io/PeTTa
 cd PeTTa
-mkdir -p repos && git clone https://github.com/patham9/mettaclaw repos/mettaclaw
+mkdir -p repos && git clone https://github.com/dort/mettaclaw repos/mettaclaw
 ```
 
 **Usage**
@@ -51,7 +51,7 @@ Alternatively, if PeTTa is already installed and the latest version pulled (v1.0
 
 ```
 !(import! &self (library lib_import))
-!(git-import! "https://github.com/patham9/mettaclaw.git")
+!(git-import! "https://github.com/dort/mettaclaw.git")
 !(import! &self (library mettaclaw lib_mettaclaw))
 
 !(mettaclaw)
